@@ -1,8 +1,8 @@
 import re
-from abc import ABCMeta
-from typing import Iterator, Mapping, Optional, Pattern
+from abc import ABCMeta, abstractmethod
+from typing import Mapping, Optional, Pattern, Generator
 
-_posix_variable = re.compile(
+_posix_variable: Pattern[str] = re.compile(
     r"""
     \$\{
         (?P<name>[^\}:]*)
@@ -12,20 +12,18 @@ _posix_variable = re.compile(
     \}
     """,
     re.VERBOSE,
-)  # type: Pattern[str]
+)
 
 
-class Atom():
-    __metaclass__ = ABCMeta
-
+class Atom(metaclass=ABCMeta):
     def __ne__(self, other: object) -> bool:
         result = self.__eq__(other)
         if result is NotImplemented:
             return NotImplemented
         return not result
 
-    def resolve(self, env: Mapping[str, Optional[str]]) -> str:
-        raise NotImplementedError
+    @abstractmethod
+    def resolve(self, env: Mapping[str, Optional[str]]) -> str: ...
 
 
 class Literal(Atom):
@@ -33,7 +31,7 @@ class Literal(Atom):
         self.value = value
 
     def __repr__(self) -> str:
-        return "Literal(value={})".format(self.value)
+        return f"Literal(value={self.value})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, self.__class__):
@@ -53,7 +51,7 @@ class Variable(Atom):
         self.default = default
 
     def __repr__(self) -> str:
-        return "Variable(name={}, default={})".format(self.name, self.default)
+        return f"Variable(name={self.name}, default={self.default})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, self.__class__):
@@ -64,18 +62,18 @@ class Variable(Atom):
         return hash((self.__class__, self.name, self.default))
 
     def resolve(self, env: Mapping[str, Optional[str]]) -> str:
-        default = self.default if self.default is not None else ""
+        default = self.default or ""
         result = env.get(self.name, default)
-        return result if result is not None else ""
+        return result or ""
 
 
-def parse_variables(value: str) -> Iterator[Atom]:
+def parse_variables(value: str) -> Generator[Atom, None, None]:
     cursor = 0
 
     for match in _posix_variable.finditer(value):
         (start, end) = match.span()
-        name = match.groupdict()["name"]
-        default = match.groupdict()["default"]
+        name = match["name"]
+        default = match["default"]
 
         if start > cursor:
             yield Literal(value=value[cursor:start])
